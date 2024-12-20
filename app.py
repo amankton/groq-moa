@@ -12,7 +12,7 @@ from moa.agent.prompts import SYSTEM_PROMPT, REFERENCE_SYSTEM_PROMPT
 
 # Default configuration
 default_main_agent_config = {
-    "main_model": "llama3-70b-8192",
+    "main_model": "mixtral-8x7b-32768",
     "cycles": 3,
     "temperature": 0.1,
     "system_prompt": SYSTEM_PROMPT,
@@ -22,24 +22,24 @@ default_main_agent_config = {
 default_layer_agent_config = {
     "layer_agent_1": {
         "system_prompt": "Think through your response step by step. {helper_response}",
-        "model_name": "llama3-8b-8192",
+        "model_name": "gemma2-9b-it",
         "temperature": 0.3
     },
     "layer_agent_2": {
         "system_prompt": "Respond with a thought and then your response to the question. {helper_response}",
-        "model_name": "gemma-7b-it",
+        "model_name": "gemma2-9b-it",
         "temperature": 0.7
     },
     "layer_agent_3": {
         "system_prompt": "You are an expert at logic and reasoning. Always take a logical approach to the answer. {helper_response}",
-        "model_name": "llama3-8b-8192",
+        "model_name": "gemma2-9b-it",
         "temperature": 0.1
     },
 }
 
 # Recommended Configuration
 rec_main_agent_config = {
-    "main_model": "llama-3.1-70b-versatile",
+    "main_model": "llama-3.3-70b-versatile",
     "cycles": 2,
     "temperature": 0.1,
     "system_prompt": SYSTEM_PROMPT,
@@ -50,24 +50,17 @@ rec_layer_agent_config = {
     "layer_agent_1": {
         "system_prompt": "Think through your response step by step. {helper_response}",
         "model_name": "gemma2-9b-it",
-        "temperature": 0.1
+        "temperature": 0.3
     },
     "layer_agent_2": {
         "system_prompt": "Respond with a thought and then your response to the question. {helper_response}",
-        "model_name": "llama-3.1-8b-instant",
-        "temperature": 0.2,
-        "max_tokens": 2048
+        "model_name": "gemma2-9b-it",
+        "temperature": 0.7
     },
     "layer_agent_3": {
         "system_prompt": "You are an expert at logic and reasoning. Always take a logical approach to the answer. {helper_response}",
-        "model_name": "llama-3.1-70b-versatile",
-        "temperature": 0.4,
-        "max_tokens": 2048
-    },
-    "layer_agent_4": {
-        "system_prompt": "You are an expert planner agent. Create a plan for how to answer the human's query. {helper_response}",
-        "model_name": "mixtral-8x7b-32768",
-        "temperature": 0.5
+        "model_name": "gemma2-9b-it",
+        "temperature": 0.1
     },
 }
 
@@ -143,7 +136,37 @@ st.set_page_config(
     layout="wide"
 )
 
-valid_model_names = [model.id for model in Groq().models.list().data if not (model.id.startswith("whisper") or model.id.startswith("llama-guard"))]
+# Initialize valid model names from Groq API
+try:
+    # Filter out whisper and llama-guard models, and preview/tool-use models
+    valid_model_names = [
+        model.id for model in Groq().models.list().data 
+        if not any(x in model.id for x in [
+            "whisper", 
+            "llama-guard", 
+            "preview", 
+            "tool-use",
+            "specdec"
+        ])
+    ]
+except Exception as e:
+    st.error(f"Error fetching models from Groq API: {str(e)}")
+    # Fallback to known models if API call fails
+    valid_model_names = [
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+        "llama-3.3-70b-versatile"
+    ]
+
+# Update main model if current one is not available
+if "moa_main_agent_config" in st.session_state and st.session_state.moa_main_agent_config["main_model"] not in valid_model_names:
+    st.session_state.moa_main_agent_config["main_model"] = valid_model_names[0]
+
+# Update layer agents if current models are not available
+if "moa_layer_agent_config" in st.session_state:
+    for agent in st.session_state.moa_layer_agent_config.values():
+        if agent["model_name"] not in valid_model_names:
+            agent["model_name"] = valid_model_names[0]
 
 st.markdown("<a href='https://groq.com'><img src='app/static/banner.png' width='500'></a>", unsafe_allow_html=True)
 st.write("---")
@@ -205,8 +228,6 @@ with st.sidebar:
             index=valid_model_names.index(st.session_state.moa_main_agent_config['main_model'])
         )
 
-
-
         # Cycles input
         new_cycles = st.number_input(
             "Number of Layers",
@@ -246,7 +267,7 @@ Valid fields:
 - ``reference_prompt``: This prompt is used to concatenate and format each layer agent's output into one string. \
 This is passed into the `{helper_response}` variable in the system prompt. \
 **IMPORTANT**: it should always include a `{responses}` prompt variable. 
-- ``main_model``: Which Groq powered model to use. Will overwrite the model given in the dropdown.\
+- ``main_model``: Which Groq powered model to use. Will overwrite the model given in the dropdown.\ 
 """
             tooltip = tooltip_str
             st.markdown("Main Agent Config", help=tooltip)
@@ -288,12 +309,12 @@ This is passed into the `{helper_response}` variable in the system prompt. \
                 st.error(f"Error updating configuration: {str(e)}")
 
     st.markdown("---")
-    st.markdown("""
-    ### Credits
-    - MOA: [Together AI](https://www.together.ai/blog/together-moa)
-    - LLMs: [Groq](https://groq.com/)
-    - Paper: [arXiv:2406.04692](https://arxiv.org/abs/2406.04692)
-    """)
+    st.markdown("""\
+### Credits
+- MOA: [Together AI](https://www.together.ai/blog/together-moa)
+- LLMs: [Groq](https://groq.com/)
+- Paper: [arXiv:2406.04692](https://arxiv.org/abs/2406.04692)
+""")
 
 # Main app layout
 st.header("Mixture of Agents", anchor=False)
